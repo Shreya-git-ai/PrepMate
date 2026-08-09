@@ -13,7 +13,7 @@ def vector_store():
     #chroma setup
     client=chromadb.PersistentClient(path="./vectorstore")
     embed_fn=embedding_functions.SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-V2")
-    collections=client.get_or_create_collection(name="prepmate",embedding_function="embed_fn")
+    collections=client.get_or_create_collection(name="prepmate",embedding_function=embed_fn)
     ids=[]
     documents=[]
     metadatas=[]
