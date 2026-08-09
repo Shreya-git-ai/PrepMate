@@ -25,4 +25,4 @@ def vector_store():
     # results=collections.query(query_texts=[],n_results=2)  ---not for now
     print(f"Stored {len(ids)} chunks in collection 'PrepMate'.")
 if __name__ == "__main__":
-    build_vectorstore()
+    vector_store()
