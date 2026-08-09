@@ -7,7 +7,7 @@ from RAG.retriever import search, format_with_citations
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
-print("KEY FOUND:", os.getenv("GROQ_API_KEY") is not None)
+
 
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
