@@ -1,9 +1,14 @@
 import os
-from groq import Groq
+from pathlib import Path
 from dotenv import load_dotenv
-from rag.retriever import search, format_with_citations
+from groq import Groq
+from RAG.retriever import search, format_with_citations
 
-load_dotenv()
+BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / ".env")
+
+print("KEY FOUND:", os.getenv("GROQ_API_KEY") is not None)
+
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 SYSTEM_PROMPT = """You are PrepMate, a study assistant. Answer the user's question 
