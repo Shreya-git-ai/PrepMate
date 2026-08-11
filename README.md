@@ -20,3 +20,8 @@ PDF ingestion and embedding storage pipeline completed.
 ### Next
 
 Implement retrieval and connect the retrieved context to the LLM.
+
+
+## Running Locally
+
+Clone the repository, install the required dependencies, and run the application locally using the project's configured environment.
