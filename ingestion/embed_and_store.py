@@ -20,7 +20,7 @@ def vector_store():
     for c in chunks:
         ids.append(f"{c["source"]}_p{c["page"]}")
         documents.append(c["text"])
-        metadatas.append( {"source": c["source"], "page": c["page"]})
+        metadatas.append( {"source": c["source"], "page": c["page"],"topic": c["topic"]})
     collections.add( ids=ids,documents=documents,metadatas=metadatas)
     # results=collections.query(query_texts=[],n_results=2)  ---not for now
     print(f"Stored {len(ids)} chunks in collection 'PrepMate'.")
