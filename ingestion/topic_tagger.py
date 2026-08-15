@@ -4,6 +4,7 @@ import os
 
 from dotenv import load_dotenv
 from groq import Groq
+from sentence_transformers import SentenceTransformer, util
 
 
 load_dotenv()
@@ -13,6 +14,10 @@ client = Groq(api_key=os.environ["GROQ_API_KEY"])
 MODEL = "llama-3.3-70b-versatile"
 
 
+# Same embedding model used for RAG embeddings
+_embed_model = SentenceTransformer("all-MiniLM-L6-V2")
+
+
 def build_topic_taxonomy(chunks, max_topics=15):
 
     # Sirf first 20 chunks ko taxonomy banane ke liye use karenge
@@ -20,7 +25,7 @@ def build_topic_taxonomy(chunks, max_topics=15):
 
     sample_text = "\n\n---\n\n".join(sample)
 
-    # Chhote documents mein unnecessary bahut saare topics na ban jayein
+    # Chhote documents ke liye unnecessary topics nahi banayenge
     effective_max = min(
         max_topics,
         max(3, len(sample) * 2)
@@ -47,7 +52,7 @@ Document excerpts:
 {sample_text}
 """
 
-    # LLM call
+    # ONE Groq call for the whole document
     response = client.chat.completions.create(
         model=MODEL,
         messages=[
@@ -59,7 +64,7 @@ Document excerpts:
         temperature=0.2
     )
 
-    # LLM response se topics nikalna
+    # Groq response se topics nikalna
     topics = _parse_json_array(
         response.choices[0].message.content
     )
@@ -72,61 +77,10 @@ Document excerpts:
     return topics
 
 
-def tag_chunk(chunk_text, taxonomy):
-
-    # Fixed taxonomy ko prompt-friendly format mein convert karna
-    topic_list_str = "\n".join(
-        f"- {t}" for t in taxonomy
-    )
-
-    prompt = f"""
-Fixed topic list (choose ONLY from these, do not invent new ones):
-
-{topic_list_str}
-
-Which topic(s) does the text chunk below belong to? Pick 1-2 MAX.
-
-If genuinely nothing fits, return ["Uncategorized"].
-
-Return ONLY a JSON array of strings, nothing else, no markdown fences.
-
-Text chunk:
-
-\"\"\"
-{chunk_text}
-\"\"\"
-"""
-
-    # Classification ke liye temperature 0
-    response = client.chat.completions.create(
-        model=MODEL,
-        messages=[
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ],
-        temperature=0
-    )
-
-    # LLM response se topics nikalna
-    tags = _parse_json_array(
-        response.choices[0].message.content
-    )
-
-    # Sirf taxonomy ke andar wale topics accept karo
-    valid_tags = [
-        tag for tag in tags
-        if tag in taxonomy
-    ]
-
-    return valid_tags or ["Uncategorized"]
-
-
-def tag_chunks_batch(chunks):
+def tag_chunks_batch(chunks, similarity_threshold=0.35, top_k=2):
 
     # PASS 1:
-    # Poore document ke liye fixed taxonomy banao
+    # LLM se fixed topic list banao
     taxonomy = build_topic_taxonomy(chunks)
 
     print(
@@ -134,45 +88,57 @@ def tag_chunks_batch(chunks):
         f"({len(taxonomy)} topics): {taxonomy}"
     )
 
-    tagged = []
-    failed_count = 0
-
     # PASS 2:
-    # Har chunk ko fixed taxonomy ke against classify karo
+    # Topics ke embeddings sirf ek baar generate karo
+    topic_embeddings = _embed_model.encode(
+        taxonomy,
+        convert_to_tensor=True
+    )
+
+    # Saare chunks ke embeddings ek saath generate karo
+    chunk_embeddings = _embed_model.encode(
+        chunks,
+        convert_to_tensor=True,
+        show_progress_bar=True
+    )
+
+    # Har chunk aur har topic ke beech cosine similarity
+    sims = util.cos_sim(
+        chunk_embeddings,
+        topic_embeddings
+    )
+
+    tagged = []
+
     for i, chunk in enumerate(chunks):
 
-        try:
-            topics = tag_chunk(chunk, taxonomy)
+        # Current chunk ki similarity row
+        row = sims[i]
 
-        except Exception as e:
+        # Highest similarity wale top_k topics
+        top_idx = row.argsort(
+            descending=True
+        )[:top_k]
 
-            # Ek chunk fail hone par poora ingestion stop nahi hoga
-            failed_count += 1
-            topics = ["Uncategorized"]
+        # Threshold se upar wale topics hi rakho
+        tags = [
+            taxonomy[j]
+            for j in top_idx
+            if row[j] >= similarity_threshold
+        ]
 
-            print(
-                f"[topic_tagger] chunk "
-                f"{i + 1}/{len(chunks)} FAILED ({e}) "
-                f"-> defaulting to Uncategorized"
-            )
-
-        else:
-
-            print(
-                f"[topic_tagger] chunk "
-                f"{i + 1}/{len(chunks)} -> {topics}"
-            )
+        # Agar koi topic sufficiently similar nahi hai
+        if not tags:
+            tags = ["Uncategorized"]
 
         tagged.append({
             "text": chunk,
-            "topics": topics
+            "topics": tags
         })
 
-    if failed_count:
         print(
-            f"[topic_tagger] done with "
-            f"{failed_count}/{len(chunks)} chunks "
-            f"falling back to Uncategorized"
+            f"[topic_tagger] chunk "
+            f"{i + 1}/{len(chunks)} -> {tags}"
         )
 
     return tagged
@@ -180,12 +146,14 @@ def tag_chunks_batch(chunks):
 
 def topics_to_metadata_string(topics):
 
+    # ChromaDB list ko metadata mein directly store nahi karega
+    # Isliye list ko string bana rahe hain
     return ",".join(topics)
 
 
 def _parse_json_array(raw):
 
-    # Markdown code fences remove karo
+    # Agar LLM ne ```json ... ``` diya ho toh fences hatao
     cleaned = re.sub(
         r"^```json|```$",
         "",
@@ -193,22 +161,21 @@ def _parse_json_array(raw):
         flags=re.MULTILINE
     ).strip()
 
-    # Pehle directly JSON parse karne ki koshish
+    # Pehle direct JSON parse try karo
     try:
         return json.loads(cleaned)
 
     except json.JSONDecodeError:
         pass
 
-    # Agar LLM ne extra text add kiya hai,
-    # toh individual [...] blocks find karo
+    # Agar extra text hai toh [...] blocks find karo
     matches = re.findall(
         r"\[[^\[\]]*\]",
         cleaned,
         re.DOTALL
     )
 
-    # Last bracket block ko pehle try karo
+    # Last block ko pehle try karo
     for match in reversed(matches):
 
         try:
@@ -227,7 +194,7 @@ def _parse_json_array(raw):
 
 if __name__ == "__main__":
 
-    # Standalone testing ke liye sample chunks
+    # Standalone test
     sample_chunks = [
         "A binary search tree is a node-based data structure where each node has at most two children...",
 
