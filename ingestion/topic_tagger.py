@@ -20,7 +20,7 @@ def build_topic_taxonomy(chunks, max_topics=15):
 
     sample_text = "\n\n---\n\n".join(sample)
 
-    # Short documents ke liye unnecessary bahut saare topics na ban jayein
+    # Chhote documents mein unnecessary bahut saare topics na ban jayein
     effective_max = min(
         max_topics,
         max(3, len(sample) * 2)
@@ -59,7 +59,7 @@ Document excerpts:
         temperature=0.2
     )
 
-    # LLM ke response se topics nikalna
+    # LLM response se topics nikalna
     topics = _parse_json_array(
         response.choices[0].message.content
     )
@@ -97,8 +97,7 @@ Text chunk:
 \"\"\"
 """
 
-    # LLM call
-    # Temperature 0 because this is classification
+    # Classification ke liye temperature 0
     response = client.chat.completions.create(
         model=MODEL,
         messages=[
@@ -115,16 +114,13 @@ Text chunk:
         response.choices[0].message.content
     )
 
-    # Sirf wahi topics accept karo jo taxonomy mein actually hain
+    # Sirf taxonomy ke andar wale topics accept karo
     valid_tags = [
         tag for tag in tags
         if tag in taxonomy
     ]
 
-    if not valid_tags:
-        return ["Uncategorized"]
-
-    return valid_tags
+    return valid_tags or ["Uncategorized"]
 
 
 def tag_chunks_batch(chunks):
@@ -139,21 +135,44 @@ def tag_chunks_batch(chunks):
     )
 
     tagged = []
+    failed_count = 0
 
     # PASS 2:
     # Har chunk ko fixed taxonomy ke against classify karo
     for i, chunk in enumerate(chunks):
 
-        topics = tag_chunk(chunk, taxonomy)
+        try:
+            topics = tag_chunk(chunk, taxonomy)
+
+        except Exception as e:
+
+            # Ek chunk fail hone par poora ingestion stop nahi hoga
+            failed_count += 1
+            topics = ["Uncategorized"]
+
+            print(
+                f"[topic_tagger] chunk "
+                f"{i + 1}/{len(chunks)} FAILED ({e}) "
+                f"-> defaulting to Uncategorized"
+            )
+
+        else:
+
+            print(
+                f"[topic_tagger] chunk "
+                f"{i + 1}/{len(chunks)} -> {topics}"
+            )
 
         tagged.append({
             "text": chunk,
             "topics": topics
         })
 
+    if failed_count:
         print(
-            f"[topic_tagger] chunk "
-            f"{i + 1}/{len(chunks)} -> {topics}"
+            f"[topic_tagger] done with "
+            f"{failed_count}/{len(chunks)} chunks "
+            f"falling back to Uncategorized"
         )
 
     return tagged
@@ -179,22 +198,27 @@ def _parse_json_array(raw):
         return json.loads(cleaned)
 
     except json.JSONDecodeError:
+        pass
 
-        # Agar LLM ne extra text add kar diya ho,
-        # toh [ ... ] wala part extract karo
-        match = re.search(
-            r"\[.*\]",
-            cleaned,
-            re.DOTALL
-        )
+    # Agar LLM ne extra text add kiya hai,
+    # toh individual [...] blocks find karo
+    matches = re.findall(
+        r"\[[^\[\]]*\]",
+        cleaned,
+        re.DOTALL
+    )
 
-        if match:
+    # Last bracket block ko pehle try karo
+    for match in reversed(matches):
 
-            try:
-                return json.loads(match.group())
+        try:
+            parsed = json.loads(match)
 
-            except json.JSONDecodeError:
-                pass
+            if isinstance(parsed, list):
+                return parsed
+
+        except json.JSONDecodeError:
+            continue
 
     raise ValueError(
         f"Could not parse topic list from LLM output: {raw[:200]}"
