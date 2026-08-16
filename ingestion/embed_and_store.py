@@ -1,28 +1,35 @@
 import chromadb
 from chromadb.utils import embedding_functions
 from ingestion.chunker import chunk_folder
+from ingestion.topic_tagger import tag_chunks_batch, topics_to_metadata_string   # NEW
 
-Data_folder="data/raw"
+Data_folder = "data/raw"
 
 def vector_store():
-    #importing chunks to embed and vector sore
-    chunks=chunk_folder(Data_folder)
-    print("total chunks are",len(chunks))
+    chunks = chunk_folder(Data_folder)
+    print("total chunks are", len(chunks))
     if not chunks:
         print("pdf not found")
-    #chroma setup
-    client=chromadb.PersistentClient(path="./vectorstore")
-    embed_fn=embedding_functions.SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-V2")
-    collections=client.get_or_create_collection(name="prepmate",embedding_function=embed_fn)
-    ids=[]
-    documents=[]
-    metadatas=[]
+
+    # --- NEW: tag chunks with topics before building metadata ---
+    texts = [c["text"] for c in chunks]
+    tagged = tag_chunks_batch(texts)
+    for c, t in zip(chunks, tagged):
+        c["topic"] = topics_to_metadata_string(t["topics"])
+    # --------------------------------------------------------------
+
+    client = chromadb.PersistentClient(path="./vectorstore")
+    embed_fn = embedding_functions.SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-V2")
+    collections = client.get_or_create_collection(name="prepmate", embedding_function=embed_fn)
+    ids = []
+    documents = []
+    metadatas = []
     for c in chunks:
-        ids.append(f"{c["source"]}_p{c["page"]}")
+        ids.append(f"{c['source']}_p{c['page']}")
         documents.append(c["text"])
-        metadatas.append( {"source": c["source"], "page": c["page"],"topic": c["topic"]})
-    collections.add( ids=ids,documents=documents,metadatas=metadatas)
-    # results=collections.query(query_texts=[],n_results=2)  ---not for now
+        metadatas.append({"source": c["source"], "page": c["page"], "topic": c["topic"]})
+    collections.add(ids=ids, documents=documents, metadatas=metadatas)
     print(f"Stored {len(ids)} chunks in collection 'PrepMate'.")
+
 if __name__ == "__main__":
     vector_store()
