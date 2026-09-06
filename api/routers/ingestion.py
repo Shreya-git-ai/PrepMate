@@ -5,7 +5,8 @@ from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from sqlalchemy.orm import Session
 
 from api.database import get_db
-from api import models, schemas, auth
+from api import models, schemas
+from api import auth_core as auth
 from ingestion.embed_and_store import process_single_file
 
 router = APIRouter(prefix="/documents", tags=["ingestion"])
