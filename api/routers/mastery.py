@@ -9,7 +9,8 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from api.database import get_db
-from api import models, schemas, auth
+from api import models, schemas
+from api import auth_core as auth
 
 router = APIRouter(prefix="/mastery", tags=["mastery"])
 
