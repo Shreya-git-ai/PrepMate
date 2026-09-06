@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
 
-from api import models, schemas, auth
+from api import models, schemas
+from api import auth_core as auth
 from RAG.generator import generate_answer
 
 router = APIRouter(prefix="/qna", tags=["qna"])
