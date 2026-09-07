@@ -1,5 +1,6 @@
 import os
 import shutil
+from typing import List
 
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from sqlalchemy.orm import Session
@@ -48,3 +49,17 @@ def upload_document(
     db.commit()
     db.refresh(document)
     return document
+
+
+@router.get("", response_model=List[schemas.DocumentOut])
+def list_documents(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    # Sirf current user ke apne documents dikhao, sabke nahi
+    return (
+        db.query(models.Document)
+        .filter(models.Document.owner_id == current_user.id)
+        .order_by(models.Document.id.desc())
+        .all()
+    )
