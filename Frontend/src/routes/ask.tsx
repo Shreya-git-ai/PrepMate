@@ -1,10 +1,13 @@
+
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { Send, Sparkles, FileText } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { Send, Sparkles } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { initialChat, suggestedQuestions, type ChatMessage } from "@/lib/mock-data";
+import { suggestedQuestions } from "@/lib/mock-data";
+import * as api from "@/lib/api";
 
 export const Route = createFileRoute("/ask")({
   head: () => ({
@@ -24,33 +27,40 @@ export const Route = createFileRoute("/ask")({
   component: AskPage,
 });
 
+type Message = { id: string; role: "user" | "assistant"; text: string };
+
 function AskPage() {
-  const [messages, setMessages] = useState<ChatMessage[]>(initialChat);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
 
-  const send = (text: string) => {
-    if (!text.trim()) return;
+  const askMutation = useMutation({
+    mutationFn: (question: string) => api.askQuestion(question),
+  });
+
+  const send = async (text: string) => {
+    if (!text.trim() || askMutation.isPending) return;
     const id = Date.now().toString();
-    setMessages((m) => [
-      ...m,
-      { id, role: "user", text },
-      {
-        id: id + "-a",
-        role: "assistant",
-        text: "Here's what your notes say: the key idea is to compare the mechanisms step by step, then check which conditions stabilise the intermediate. Practise two problems on this before moving on.",
-        citations: [
-          { label: "Organic Chemistry — Unit 3", page: 21 },
-          { label: "Cell Biology Lecture Slides", page: 8 },
-        ],
-      },
-    ]);
+    setMessages((m) => [...m, { id, role: "user", text }]);
     setDraft("");
+
+    try {
+      const res = await askMutation.mutateAsync(text);
+      setMessages((m) => [...m, { id: id + "-a", role: "assistant", text: res.answer }]);
+    } catch (err) {
+      const message = err instanceof api.ApiError ? err.message : "Something went wrong.";
+      setMessages((m) => [...m, { id: id + "-err", role: "assistant", text: `⚠️ ${message}` }]);
+    }
   };
 
   return (
     <AppShell title="Ask your notes" subtitle="Every answer is cited back to your uploads.">
       <div className="mx-auto flex max-w-3xl flex-col gap-4">
         <div className="flex flex-col gap-4">
+          {messages.length === 0 && (
+            <p className="text-center text-sm text-muted-foreground">
+              Ask anything from your uploaded PDFs to get started.
+            </p>
+          )}
           {messages.map((m) =>
             m.role === "user" ? (
               <div key={m.id} className="flex justify-end">
@@ -65,22 +75,12 @@ function AskPage() {
                 </span>
                 <div className="max-w-[85%] rounded-2xl rounded-tl-md bg-card p-4 shadow-soft">
                   <p className="text-sm leading-relaxed">{m.text}</p>
-                  {m.citations && (
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      {m.citations.map((c, i) => (
-                        <span
-                          key={i}
-                          className="inline-flex items-center gap-1 rounded-lg bg-secondary px-2 py-1 text-[11px] font-semibold text-secondary-foreground"
-                        >
-                          <FileText className="size-3" />
-                          {c.label} · p.{c.page}
-                        </span>
-                      ))}
-                    </div>
-                  )}
                 </div>
               </div>
             ),
+          )}
+          {askMutation.isPending && (
+            <p className="text-sm text-muted-foreground">PrepMate is thinking…</p>
           )}
         </div>
 

@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AskRouteImport } from './routes/ask'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as ProgressRouteImport } from './routes/progress'
 import { Route as QuizRouteImport } from './routes/quiz'
 import { Route as RevisionRouteImport } from './routes/revision'
@@ -24,6 +25,11 @@ const IndexRoute = IndexRouteImport.update({
 const AskRoute = AskRouteImport.update({
   id: '/ask',
   path: '/ask',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProgressRoute = ProgressRouteImport.update({
@@ -50,6 +56,7 @@ const TopicsRoute = TopicsRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/ask': typeof AskRoute
+  '/login': typeof LoginRoute
   '/progress': typeof ProgressRoute
   '/quiz': typeof QuizRoute
   '/revision': typeof RevisionRoute
@@ -58,6 +65,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/ask': typeof AskRoute
+  '/login': typeof LoginRoute
   '/progress': typeof ProgressRoute
   '/quiz': typeof QuizRoute
   '/revision': typeof RevisionRoute
@@ -67,6 +75,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/ask': typeof AskRoute
+  '/login': typeof LoginRoute
   '/progress': typeof ProgressRoute
   '/quiz': typeof QuizRoute
   '/revision': typeof RevisionRoute
@@ -74,16 +83,25 @@ export interface FileRoutesById {
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/ask' | '/progress' | '/quiz' | '/revision' | '/topics'
+  fullPaths:
+    '/' | '/ask' | '/login' | '/progress' | '/quiz' | '/revision' | '/topics'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/ask' | '/progress' | '/quiz' | '/revision' | '/topics'
+  to: '/' | '/ask' | '/login' | '/progress' | '/quiz' | '/revision' | '/topics'
   id:
-    '__root__' | '/' | '/ask' | '/progress' | '/quiz' | '/revision' | '/topics'
+    | '__root__'
+    | '/'
+    | '/ask'
+    | '/login'
+    | '/progress'
+    | '/quiz'
+    | '/revision'
+    | '/topics'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AskRoute: typeof AskRoute
+  LoginRoute: typeof LoginRoute
   ProgressRoute: typeof ProgressRoute
   QuizRoute: typeof QuizRoute
   RevisionRoute: typeof RevisionRoute
@@ -104,6 +122,13 @@ declare module '@tanstack/react-router' {
       path: '/ask'
       fullPath: '/ask'
       preLoaderRoute: typeof AskRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/progress': {
@@ -140,6 +165,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AskRoute: AskRoute,
+  LoginRoute: LoginRoute,
   ProgressRoute: ProgressRoute,
   QuizRoute: QuizRoute,
   RevisionRoute: RevisionRoute,
