@@ -10,6 +10,9 @@ from api import models, schemas
 from api import auth_core as auth
 from ingestion.embed_and_store import process_single_file
 
+
+import logging
+import traceback
 router = APIRouter(prefix="/documents", tags=["ingestion"])
 
 UPLOAD_DIR = "data/raw"
@@ -41,10 +44,12 @@ def upload_document(
     try:
         chunk_count = process_single_file(dest_path)
         document.status = "processed"
-    except Exception:
+    except Exception as e:
         document.status = "failed"
         db.commit()
-        raise HTTPException(status_code=500, detail="Failed to process document")
+        print("UPLOAD FAILED:", str(e))
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to process document: {str(e)}")
 
     db.commit()
     db.refresh(document)

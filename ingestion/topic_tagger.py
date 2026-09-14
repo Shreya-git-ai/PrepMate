@@ -11,7 +11,8 @@ load_dotenv()
 
 client = Groq(api_key=os.environ["GROQ_API_KEY"])
 
-MODEL = "llama-3.3-70b-versatile"
+
+MODEL = os.getenv("GROQ_TAXONOMY_MODEL", "qwen/qwen3.6-27b")
 
 
 # Same embedding model used for RAG embeddings
@@ -63,6 +64,9 @@ Document excerpts:
         ],
         temperature=0.2
     )
+
+
+    print("RAW GROQ RESPONSE:", repr(response.choices[0].message.content))
 
     # Groq response se topics nikalna
     topics = _parse_json_array(
