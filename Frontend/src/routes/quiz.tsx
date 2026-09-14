@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router";
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Check, Clock, X } from "lucide-react";
@@ -27,6 +27,7 @@ export const Route = createFileRoute("/quiz")({
 function QuizPage() {
   const { topic: rawTopic } = useSearch({ from: "/quiz" });
   const topic = rawTopic || "General";
+  const navigate = useNavigate();
 
   const quizQuery = useQuery({
     queryKey: ["quiz", topic],
@@ -42,6 +43,8 @@ function QuizPage() {
   const [index, setIndex] = useState(0);
   const [choice, setChoice] = useState<number | null>(null);
   const [result, setResult] = useState<api.AttemptResult | null>(null);
+  const [correctCount, setCorrectCount] = useState(0);
+  const [startedAt] = useState(() => Date.now());
 
   const questions = quizQuery.data?.questions ?? [];
   const q = questions[index];
@@ -75,8 +78,21 @@ function QuizPage() {
     if (selectedOption === undefined) return;
     attemptMutation.mutate(
       { questionId: q.id, selected: selectedOption },
-      { onSuccess: (res) => setResult(res) }
+      {
+        onSuccess: (res) => {
+          setResult(res);
+          if (res.is_correct) setCorrectCount((c) => c + 1);
+        },
+      }
     );
+  };
+
+  const goToResults = () => {
+    const seconds = Math.round((Date.now() - startedAt) / 1000);
+    navigate({
+      to: "/progress",
+      search: { score: correctCount, total: questions.length, seconds, topic },
+    });
   };
 
   return (
@@ -142,8 +158,8 @@ function QuizPage() {
               {attemptMutation.isPending ? "Checking…" : "Submit answer"}
             </Button>
           ) : isLast ? (
-            <Button asChild className="rounded-xl px-6 font-semibold">
-              <Link to="/progress">See results</Link>
+            <Button onClick={goToResults} className="rounded-xl px-6 font-semibold">
+              See results
             </Button>
           ) : (
             <Button
